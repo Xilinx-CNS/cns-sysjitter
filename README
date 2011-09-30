@@ -1,4 +1,4 @@
-sysjitter v1.0
+sysjitter v1.1
 
 Copyright 2010 David Riddoch <david@riddoch.org.uk>
 
@@ -26,20 +26,23 @@ Building
 Running
 -------
 
+  It is important to run sysjitter on a system that is idle.  If running on
+  a system with cpusets enabled, then run sysjitter as root.
+
     sysjitter <threshold-nsec>
 
-  The argument tells sysjitter to ignore any "interruptions" shorter than
-  the value given.  Something in the region of a few hundred nanoseconds is
-  a reasonable choice here.
+  The argument <threshold-nsec> tells sysjitter to ignore any
+  "interruptions" shorter than the value given.  Something in the region of
+  a few hundred nanoseconds is a reasonable choice here.
 
-  By default it will run for 70 seconds.  Override as follows:
+  By default it will run for 70 seconds.  Override with the --runtime
+  option.  e.g. For a 10 second run:
 
-    sysjitter --runtime 10 500
+    sysjitter --runtime 10 300
 
-  Default output is summary statistics for each CPU core.  You can also get
-  the raw data out as follows:
+  The default output gives summary statistics for each CPU core.  Pipe the
+  output through "column -t" to make it a little easier on the eye.
 
-    sysjitter --raw sjdata 500
-
-  This will place the raw data in a separate file for each CPU core.  The
-  files wil be named "sjdata.<core#>".
+  You can get the raw data out with the --raw option.  This includes the
+  timestamp and duration of each interruption on each CPU core.  The data
+  is placed in a separate file for each CPU core.

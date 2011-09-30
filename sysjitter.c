@@ -1,5 +1,5 @@
 /*
- * sysjitter v1.0
+ * sysjitter v1.1
  *
  * Copyright 2010 David Riddoch <david@riddoch.org.uk>
  *
@@ -121,6 +121,7 @@ struct global {
   unsigned              n_threads_finished;
   struct timeval        tv_start;
   int                   sort_raw;
+  int                   verbose;
 };
 
 
@@ -323,6 +324,10 @@ static void thread_calc_stats(struct thread* t)
     t->int_999 = t->sorted[(int) (t->int_n * 0.999)]->diff;
     t->int_9999 = t->sorted[(int) (t->int_n * 0.9999)]->diff;
     t->int_99999 = t->sorted[(int) (t->int_n * 0.99999)]->diff;
+    sum = 0;
+    for( i = t->interruptions; i != t->c_interruption; ++i )
+      sum += i->diff;
+    t->int_mean = sum / t->int_n;
   }
   else {
     t->int_min = 0;
@@ -333,12 +338,8 @@ static void thread_calc_stats(struct thread* t)
     t->int_999 = 0;
     t->int_9999 = 0;
     t->int_99999 = 0;
+    t->int_mean = 0;
   }
-
-  sum = 0;
-  for( i = t->interruptions; i != t->c_interruption; ++i )
-    sum += i->diff;
-  t->int_mean = sum / t->int_n;
 }
 
 
@@ -447,10 +448,10 @@ static void write_raw(struct thread** threads, const char* outf)
 #define put_frc(fn)  putfield(fn, PRIx64)
 #define put_cycles(fn)                                          \
   _putfield(#fn"(ns)", cycles_to_ns(t[i], t[i]->fn), PRIu64)
-#define put_cycles_s(fn)                                      \
+#define put_cycles_s(fn)                                        \
   _putfield(#fn"(s)", cycles_to_sec_f(t[i], t[i]->fn), ".3f")
-#define put_percent(a, b)                                         \
-  _putfield(#a"(%%)", (t[i]->b ? (t[i]->a * 1e2 / t[i]->b) : 0.0), ".3f")
+#define put_percent(a, b)                                               \
+  _putfield(#a"(%)", (t[i]->b ? (t[i]->a * 1e2 / t[i]->b) : 0.0), ".3f")
 
 
 static void write_summary(struct thread** t, FILE* f)
@@ -460,8 +461,8 @@ static void write_summary(struct thread** t, FILE* f)
   for( i = 0; i < g.n_threads; ++i )
     thread_calc_stats(t[i]);
 
-  _putfield("threshold(ns)", g.threshold_nsec, "u");
   putu(core_i);
+  _putfield("threshold(ns)", g.threshold_nsec, "u");
   putu(cpu_mhz);
   put_cycles(runtime);
   put_cycles_s(runtime);
@@ -479,8 +480,10 @@ static void write_summary(struct thread** t, FILE* f)
   put_cycles(int_max);
   put_cycles(int_total);
   put_percent(int_total, runtime);
-  put_frc(frc_start);
-  put_frc(frc_stop);
+  if( g.verbose ) {
+    put_frc(frc_start);
+    put_frc(frc_stop);
+  }
 }
 
 
@@ -547,6 +550,17 @@ static void calc_max_interruptions(struct thread** threads, int runtime)
 }
 
 
+static void move_to_root_cpuset(void)
+{
+  /* Move this process to the root cpuset.  Should have no effect on
+   * systems that don't have cpusets.
+   */
+  char cmd[80];
+  sprintf(cmd, "echo %d >/cpusets/tasks\n 2>/dev/null", (int) getpid());
+  system(cmd);
+}
+
+
 static void handle_alarm(int code)
 {
   g.cmd = STOP;
@@ -561,6 +575,8 @@ static void usage(const char* prog)
   fprintf(stderr, "options:\n");
   fprintf(stderr, "  --runtime <seconds>\n");
   fprintf(stderr, "  --raw <filename-prefix>\n");
+  fprintf(stderr, "  --sort\n");
+  fprintf(stderr, "  --verbose\n");
   exit(1);
 }
 
@@ -596,6 +612,9 @@ int main(int argc, char* argv[])
     else if( strcmp(argv[0], "--sort") == 0 ) {
       g.sort_raw = 1;
     }
+    else if( strcmp(argv[0], "--verbose") == 0 ) {
+      g.verbose = 1;
+    }
     else {
       usage(app);
     }
@@ -604,6 +623,8 @@ int main(int argc, char* argv[])
   if( argc != 1  ||
       sscanf(argv[0], "%u%c", &g.threshold_nsec, &dummy) != 1 )
     usage(app);
+
+  move_to_root_cpuset();
 
   signal(SIGALRM, handle_alarm);
 
