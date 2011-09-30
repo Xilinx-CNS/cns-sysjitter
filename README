@@ -1,0 +1,45 @@
+sysjitter v1.0
+
+Copyright 2010 David Riddoch <david@riddoch.org.uk>
+
+sysjitter measures the extent to which the system impacts on user-level
+code by causing jitter.  It runs a thread on each processor core, and when
+the thread is "knocked off" the core it measures how long for.  At the end
+of the run it outputs some summary statistics for each core, and optionally
+the full raw data.
+
+
+Prerequisites
+-------------
+
+- Supports x86 and x86_64 processors.
+
+- Requires a version of gcc with support for built-in atomics.
+
+
+Building
+--------
+
+  make
+
+
+Running
+-------
+
+    sysjitter <threshold-nsec>
+
+  The argument tells sysjitter to ignore any "interruptions" shorter than
+  the value given.  Something in the region of a few hundred nanoseconds is
+  a reasonable choice here.
+
+  By default it will run for 70 seconds.  Override as follows:
+
+    sysjitter --runtime 10 500
+
+  Default output is summary statistics for each CPU core.  You can also get
+  the raw data out as follows:
+
+    sysjitter --raw sjdata 500
+
+  This will place the raw data in a separate file for each CPU core.  The
+  files wil be named "sjdata.<core#>".
