@@ -46,3 +46,7 @@ Running
   You can get the raw data out with the --raw option.  This includes the
   timestamp and duration of each interruption on each CPU core.  The data
   is placed in a separate file for each CPU core.
+
+  Note that the cpu_mhz row is misnamed; this is actually the measured tick
+  rate of the CPU timestamp counter (in MHz), which may or may not be the
+  same as the clock frequency.
