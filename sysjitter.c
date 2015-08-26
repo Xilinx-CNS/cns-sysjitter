@@ -565,7 +565,7 @@ static void move_to_root_cpuset(void)
    * systems that don't have cpusets.
    */
   char cmd[80];
-  sprintf(cmd, "echo %d >/cpusets/tasks\n 2>/dev/null", (int) getpid());
+  sprintf(cmd, "{ echo %d >/cpusets/tasks; } 2>/dev/null", (int) getpid());
   system(cmd);
 }
 
