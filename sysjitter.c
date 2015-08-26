@@ -56,7 +56,7 @@ static inline void frc(uint64_t* pval)
 {
   __asm__ __volatile__("rdtsc" : "=A" (*pval));
 }
-# elif defined(__powerpc64__)
+# elif defined(__PPC64__)
 #  define relax()          do{}while(0)
 static inline void frc(uint64_t* pval)
 {
