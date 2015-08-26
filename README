@@ -1,6 +1,6 @@
-sysjitter v1.1
+sysjitter v1.2
 
-Copyright 2010 David Riddoch <david@riddoch.org.uk>
+Copyright 2010-2015 David Riddoch <david@riddoch.org.uk>
 
 sysjitter measures the extent to which the system impacts on user-level
 code by causing jitter.  It runs a thread on each processor core, and when
@@ -12,7 +12,7 @@ the full raw data.
 Prerequisites
 -------------
 
-- Supports x86 and x86_64 processors.
+- Supports x86, x86_64 and Power processors.
 
 - Requires a version of gcc with support for built-in atomics.
 

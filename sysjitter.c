@@ -1,7 +1,7 @@
 /*
- * sysjitter v1.1
+ * sysjitter v1.2
  *
- * Copyright 2010 David Riddoch <david@riddoch.org.uk>
+ * Copyright 2010-2015 David Riddoch <david@riddoch.org.uk>
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of version 3 of the GNU General Public License as
@@ -55,6 +55,12 @@ static inline void frc(uint64_t* pval)
 static inline void frc(uint64_t* pval)
 {
   __asm__ __volatile__("rdtsc" : "=A" (*pval));
+}
+# elif defined(__powerpc64__)
+#  define relax()          do{}while(0)
+static inline void frc(uint64_t* pval)
+{
+  __asm__ __volatile__("mfspr %0, 268\n" : "=r" (*pval));
 }
 # else
 #  error Need frc() for this platform.
@@ -110,18 +116,21 @@ struct thread {
 
 
 struct global {
-  volatile enum command cmd;
+  /* Configuration. */
   unsigned              max_interruptions;
   unsigned              runtime_secs;
   unsigned              threshold_nsec;
   unsigned              n_threads;
-  unsigned              n_threads_started;
-  unsigned              n_threads_ready;
-  unsigned              n_threads_running;
-  unsigned              n_threads_finished;
   struct timeval        tv_start;
   int                   sort_raw;
   int                   verbose;
+
+  /* Mutable state. */
+  volatile enum command cmd;
+  volatile unsigned     n_threads_started;
+  volatile unsigned     n_threads_ready;
+  volatile unsigned     n_threads_running;
+  volatile unsigned     n_threads_finished;
 };
 
 
@@ -590,7 +599,7 @@ int main(int argc, char* argv[])
   int i, runtime = 70;
 
   g.max_interruptions = 1000000;
-  g.n_threads = sysconf(_SC_NPROCESSORS_CONF);
+  g.n_threads = sysconf(_SC_NPROCESSORS_ONLN);
 
   --argc; ++argv;
   for( ; argc; --argc, ++argv ) {
