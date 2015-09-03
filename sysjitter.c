@@ -1,5 +1,5 @@
 /*
- * sysjitter v1.2
+ * sysjitter v1.3
  *
  * Copyright 2010-2015 David Riddoch <david@riddoch.org.uk>
  *

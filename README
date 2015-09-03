@@ -1,12 +1,12 @@
-sysjitter v1.2
+sysjitter v1.3
 
-Copyright 2010-2015 David Riddoch <david@riddoch.org.uk>
+ Copyright 2010-2015 David Riddoch <david@riddoch.org.uk>
 
-sysjitter measures the extent to which the system impacts on user-level
-code by causing jitter.  It runs a thread on each processor core, and when
-the thread is "knocked off" the core it measures how long for.  At the end
-of the run it outputs some summary statistics for each core, and optionally
-the full raw data.
+ sysjitter measures the extent to which the system impacts on user-level
+ code by causing jitter.  It runs a thread on each processor core, and when
+ the thread is "knocked off" the core it measures how long for.  At the end
+ of the run it outputs some summary statistics for each core, and
+ optionally the full raw data.
 
 
 Prerequisites
