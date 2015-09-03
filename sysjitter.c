@@ -157,6 +157,15 @@ static void test_fail(const char* what, int line)
 }
 
 
+static int move_to_core(int core_i)
+{
+  cpu_set_t cpus;
+  CPU_ZERO(&cpus);
+  CPU_SET(core_i, &cpus);
+  return sched_setaffinity(0, sizeof(cpus), &cpus);
+}
+
+
 static cycles_t __measure_cpu_hz(void)
 {
   struct timeval tvs, tve;
@@ -250,16 +259,12 @@ static void* thread_main(void* arg)
    * dropping into a low power state.
    */
   struct thread* t = arg;
-  cpu_set_t cpus;
-
-  CPU_ZERO(&cpus);
-  CPU_SET(t->core_i, &cpus);
-  TEST(sched_setaffinity(0, sizeof(cpus), &cpus) == 0);
 
   /* Alloc memory in the thread itself after setting affinity to get the
    * best chance of getting numa-local memory.  Doesn't matter so much for
    * the "struct thread" since we expect that to stay cache resident.
    */
+  TEST(move_to_core(t->core_i) == 0);
   thread_init(t);
 
   /* Don't bash the cpu until all threads have got going. */
@@ -352,14 +357,14 @@ static void thread_calc_stats(struct thread* t)
 }
 
 
-static void post_test_checks(struct thread** threads)
+static void post_test_checks(struct thread* threads)
 {
   struct thread* t;
   int early = 0;
   int i;
 
   for( i = 0; i < g.n_threads; ++i ) {
-    t = threads[i];
+    t = &(threads[i]);
     if( t->c_interruption - t->interruptions == g.max_interruptions ) {
       early = 1;
       fprintf(stderr, "ERROR: Thread %d finished at %.1fs (max=%d)\n", i,
@@ -426,7 +431,7 @@ static void write_thread_raw(struct thread* t, FILE* f)
 }
 
 
-static void write_raw(struct thread** threads, const char* outf)
+static void write_raw(struct thread* threads, const char* outf)
 {
   char fname[strlen(outf) + 10];
   FILE* f;
@@ -438,7 +443,7 @@ static void write_raw(struct thread** threads, const char* outf)
       fprintf(stderr, "ERROR: %s\n", strerror(errno));
       continue;
     }
-    write_thread_raw(threads[i], f);
+    write_thread_raw(&(threads[i]), f);
     fclose(f);
   }
 }
@@ -451,24 +456,24 @@ static void write_raw(struct thread** threads, const char* outf)
   printf("\n");                                 \
 } while( 0 )
 
-#define putfield(fn, fmt)  _putfield(#fn, t[i]->fn, fmt)
+#define putfield(fn, fmt)  _putfield(#fn, t[i].fn, fmt)
 
 #define putu(fn)    putfield(fn, "u")
 #define put_frc(fn)  putfield(fn, PRIx64)
 #define put_cycles(fn)                                          \
-  _putfield(#fn"(ns)", cycles_to_ns(t[i], t[i]->fn), PRIu64)
+  _putfield(#fn"(ns)", cycles_to_ns(&(t[i]), t[i].fn), PRIu64)
 #define put_cycles_s(fn)                                        \
-  _putfield(#fn"(s)", cycles_to_sec_f(t[i], t[i]->fn), ".3f")
+  _putfield(#fn"(s)", cycles_to_sec_f(&(t[i]), t[i].fn), ".3f")
 #define put_percent(a, b)                                               \
-  _putfield(#a"(%)", (t[i]->b ? (t[i]->a * 1e2 / t[i]->b) : 0.0), ".3f")
+  _putfield(#a"(%)", (t[i].b ? (t[i].a * 1e2 / t[i].b) : 0.0), ".3f")
 
 
-static void write_summary(struct thread** t, FILE* f)
+static void write_summary(struct thread* t, FILE* f)
 {
   int i;
 
   for( i = 0; i < g.n_threads; ++i )
-    thread_calc_stats(t[i]);
+    thread_calc_stats(&(t[i]));
 
   putu(core_i);
   _putfield("threshold(ns)", g.threshold_nsec, "u");
@@ -477,7 +482,7 @@ static void write_summary(struct thread** t, FILE* f)
   put_cycles_s(runtime);
   putu(int_n);
   _putfield("int_n_per_sec",
-            t[i]->int_n / cycles_to_sec_f(t[i], t[i]->runtime), ".3f");
+            t[i].int_n / cycles_to_sec_f(&(t[i]), t[i].runtime), ".3f");
   put_cycles(int_min);
   put_cycles(int_median);
   put_cycles(int_mean);
@@ -496,7 +501,7 @@ static void write_summary(struct thread** t, FILE* f)
 }
 
 
-static void run_expt(struct thread** threads, int runtime_secs)
+static void run_expt(struct thread* threads, int runtime_secs)
 {
   int i;
 
@@ -508,8 +513,8 @@ static void run_expt(struct thread** threads, int runtime_secs)
   g.cmd = WAIT;
 
   for( i = 0; i < g.n_threads; ++i )
-    TEST0(pthread_create(&threads[i]->thread_id, NULL,
-                         thread_main, threads[i]));
+    TEST0(pthread_create(&(threads[i].thread_id), NULL,
+                         thread_main, &(threads[i])));
   while( g.n_threads_started != g.n_threads )
     usleep(1000);
   gettimeofday(&g.tv_start, NULL);
@@ -517,24 +522,24 @@ static void run_expt(struct thread** threads, int runtime_secs)
 
   /* Go to sleep until the threads have done their stuff. */
   for( i = 0; i < g.n_threads; ++i )
-    pthread_join(threads[i]->thread_id, NULL);
+    pthread_join(threads[i].thread_id, NULL);
   post_test_checks(threads);
 }
 
 
-static void cleanup_expt(struct thread** threads)
+static void cleanup_expt(struct thread* threads)
 {
   int i;
   for( i = 0; i < g.n_threads; ++i ) {
-    free(threads[i]->interruptions);
-    threads[i]->interruptions = NULL;
-    free(threads[i]->sorted);
-    threads[i]->sorted = NULL;
+    free(threads[i].interruptions);
+    threads[i].interruptions = NULL;
+    free(threads[i].sorted);
+    threads[i].sorted = NULL;
   }
 }
 
 
-static void calc_max_interruptions(struct thread** threads, int runtime)
+static void calc_max_interruptions(struct thread* threads, int runtime)
 {
   /* Calculate how big max_interruptions needs to be for real run of
    * [runtime] seconds.
@@ -543,7 +548,7 @@ static void calc_max_interruptions(struct thread** threads, int runtime)
   int i, max = 0, per_sec;
 
   for( i = 0; i < g.n_threads; ++i ) {
-    t = threads[i];
+    t = &(threads[i]);
     t->int_n = t->c_interruption - t->interruptions;
     if( t->int_n > max )
       max = t->int_n;
@@ -592,14 +597,13 @@ static void usage(const char* prog)
 
 int main(int argc, char* argv[])
 {
-  struct thread** threads;
+  struct thread* threads;
   const char* app = argv[0];
   const char* outf = NULL;
   char dummy;
-  int i, runtime = 70;
+  int i, n_cores, runtime = 70;
 
   g.max_interruptions = 1000000;
-  g.n_threads = sysconf(_SC_NPROCESSORS_ONLN);
 
   --argc; ++argv;
   for( ; argc; --argc, ++argv ) {
@@ -634,14 +638,13 @@ int main(int argc, char* argv[])
     usage(app);
 
   move_to_root_cpuset();
+  n_cores = sysconf(_SC_NPROCESSORS_CONF);
+  TEST( threads = malloc(n_cores * sizeof(threads[0])) );
+  for( i = 0; i < n_cores; ++i )
+    if( move_to_core(i) == 0 )
+      threads[g.n_threads++].core_i = i;
 
   signal(SIGALRM, handle_alarm);
-
-  TEST(threads = malloc(g.n_threads * sizeof(threads[0])));
-  for( i = 0; i < g.n_threads; ++i ) {
-    threads[i] = malloc(sizeof(struct thread));
-    threads[i]->core_i = i;
-  }
 
   run_expt(threads, 1);
   calc_max_interruptions(threads, runtime);
