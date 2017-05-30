@@ -436,9 +436,18 @@ static void write_raw(struct thread* threads, const char* outf)
 {
   char fname[strlen(outf) + 10];
   FILE* f;
-  int i;
+  int i, core_digits, max_core_i = -1;
+
+  /* Find out max core_i so we can pad the core_i in the filename to the
+   * appropriate width.
+   */
+  for( i = 0; i < g.n_threads; ++i )
+    if( threads[i].core_i > max_core_i )
+      max_core_i = threads[i].core_i;
+  sprintf(fname, "%d%n", max_core_i, &core_digits);
+
   for( i = 0; i < g.n_threads; ++i ) {
-    sprintf(fname, "%s.%d", outf, threads[i].core_i);
+    sprintf(fname, "%s.%0*d", outf, core_digits, threads[i].core_i);
     if( (f = fopen(fname, "w")) == NULL ) {
       fprintf(stderr, "ERROR: Could not open '%s' for writing\n", fname);
       fprintf(stderr, "ERROR: %s\n", strerror(errno));
