@@ -633,7 +633,7 @@ static bool parse_comma_sep_ranges(const char* csr_in,
                                    int** list, int* list_len)
 {
   char* csr = strdupa(csr_in);
-  char *saveptr, *t;
+  char *saveptr = NULL, *t;
   unsigned low, high;
   char dummy;
 
