@@ -1,0 +1,25 @@
+
+sysjitter-1.4
+-------------
+
+Suppress compiler warning.
+Improve error messages and usage info.
+Update README for v1.4, and add option --version.
+Pad the core ids in the raw filenames so that they have equal width.
+Add option --cores to set which CPU cores sysjitter will measure.
+
+
+sysjitter-1.3
+-------------
+
+Update version for 1.3 release.
+Do not assume that online cores are numbered linearly.
+
+
+sysjitter-1.2
+-------------
+
+Further PPC build fix.
+Kill the error message when cpusets are not being used.
+Fixes for Power platform, and update version to v1.2.
+Added note to README to clarify meaning of cpu_mhz.
