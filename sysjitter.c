@@ -42,6 +42,33 @@
 #include <stdbool.h>
 
 
+/* Used as prefix for error and warning messages. */
+#define APP_NAME  "sysjitter"
+
+
+static void usage_msg(FILE* f)
+{
+  fprintf(f, "usage:\n");
+  fprintf(f, "  %s [options] THRESHOLD_NSEC\n", APP_NAME);
+  fprintf(f, "\n");
+  fprintf(f, "options:\n");
+  fprintf(f, "  --runtime SECONDS\n");
+  fprintf(f, "  --raw FILENAME-PREFIX\n");
+  fprintf(f, "  --cores COMMA-SEP-LIST-OF-CORES-OR-RANGES\n");
+  fprintf(f, "  --sort\n");
+  fprintf(f, "  --verbose\n");
+  fprintf(f, "  --help\n");
+  fprintf(f, "  --version\n");
+}
+
+
+static void usage_err(void)
+{
+  usage_msg(stderr);
+  exit(1);
+}
+
+
 #ifdef __GNUC__
 # define atomic_inc(ptr)   __sync_add_and_fetch((ptr), 1)
 # if defined(__x86_64__)
@@ -150,11 +177,10 @@ static struct global g;
 
 static void test_fail(const char* what, int line)
 {
-  fprintf(stderr, "ERROR:\n");
+  fprintf(stderr, "ERROR: Internal error in %s\n", APP_NAME);
   fprintf(stderr, "ERROR: TEST(%s)\n", what);
-  fprintf(stderr, "ERROR: at line %d\n", line);
-  fprintf(stderr, "ERROR: errno=%d (%s)\n", errno, strerror(errno));
-  fprintf(stderr, "ERROR:\n");
+  fprintf(stderr, "ERROR: at line=%d errno=%d (%s)\n",
+          line, errno, strerror(errno));
   exit(1);
 }
 
@@ -369,15 +395,15 @@ static void post_test_checks(struct thread* threads)
     t = &(threads[i]);
     if( t->c_interruption - t->interruptions == g.max_interruptions ) {
       early = 1;
-      fprintf(stderr, "ERROR: Thread %d finished at %.1fs (max=%d)\n", i,
-              cycles_to_sec_f(t, t->frc_stop - t->frc_start),
+      fprintf(stderr, "%s: ERROR: Thread %d finished at %.1fs (max=%d)\n",
+              APP_NAME, i, cycles_to_sec_f(t, t->frc_stop - t->frc_start),
               g.max_interruptions);
     }
   }
 
   if( early ) {
-    fprintf(stderr,
-            "You probably need to increase the interruption threshold.\n");
+    fprintf(stderr, "%s: You probably need to increase the interruption "
+            "threshold.\n", APP_NAME);
     exit(2);
   }
 }
@@ -433,11 +459,12 @@ static void write_thread_raw(struct thread* t, FILE* f)
 }
 
 
-static void write_raw(struct thread* threads, const char* outf)
+static int write_raw(struct thread* threads, const char* outf)
 {
   char fname[strlen(outf) + 10];
   FILE* f;
   int i, core_digits, max_core_i = -1;
+  int rc = 0;
 
   /* Find out max core_i so we can pad the core_i in the filename to the
    * appropriate width.
@@ -450,13 +477,15 @@ static void write_raw(struct thread* threads, const char* outf)
   for( i = 0; i < g.n_threads; ++i ) {
     sprintf(fname, "%s.%0*d", outf, core_digits, threads[i].core_i);
     if( (f = fopen(fname, "w")) == NULL ) {
-      fprintf(stderr, "ERROR: Could not open '%s' for writing\n", fname);
-      fprintf(stderr, "ERROR: %s\n", strerror(errno));
+      fprintf(stderr, "%s: ERROR: Could not open '%s' for writing (%s)\n",
+              APP_NAME, fname, strerror(errno));
+      rc = 3;
       continue;
     }
     write_thread_raw(&(threads[i]), f);
     fclose(f);
   }
+  return rc;
 }
 
 
@@ -625,25 +654,9 @@ static bool parse_comma_sep_ranges(const char* csr_in,
 }
 
 
-static void usage(const char* prog)
-{
-  fprintf(stderr, "usage:\n");
-  fprintf(stderr, "  %s [options] <threshold_nsec>\n", prog);
-  fprintf(stderr, "\n");
-  fprintf(stderr, "options:\n");
-  fprintf(stderr, "  --runtime <seconds>\n");
-  fprintf(stderr, "  --raw <filename-prefix>\n");
-  fprintf(stderr, "  --cores <comma-sep-list-of-cores>\n");
-  fprintf(stderr, "  --sort\n");
-  fprintf(stderr, "  --verbose\n");
-  exit(1);
-}
-
-
 int main(int argc, char* argv[])
 {
   struct thread* threads;
-  const char* app = argv[0];
   const char* raw_prefix = NULL;
   const char* cores_opt = NULL;
   char dummy;
@@ -679,18 +692,22 @@ int main(int argc, char* argv[])
     else if( strcmp(argv[0], "--verbose") == 0 ) {
       g.verbose = 1;
     }
+    else if( strcmp(argv[0], "--help") == 0 ) {
+      usage_msg(stdout);
+      exit(0);
+    }
     else if( strcmp(argv[0], "--version") == 0 ) {
       printf("%s\n", SYSJITTER_VERSION);
       exit(0);
     }
     else {
-      usage(app);
+      usage_err();
     }
   }
 
   if( argc != 1  ||
       sscanf(argv[0], "%u%c", &g.threshold_nsec, &dummy) != 1 )
-    usage(app);
+    usage_err();
 
   if( cores_opt == NULL ) {
     n_cores = sysconf(_SC_NPROCESSORS_CONF);
@@ -700,7 +717,7 @@ int main(int argc, char* argv[])
   }
   else {
     if( ! parse_comma_sep_ranges(cores_opt, &cores, &n_cores) ) {
-      fprintf(stderr, "ERROR: badly formatted --cores arg\n");
+      fprintf(stderr, "%s: ERROR: badly formatted --cores arg\n", APP_NAME);
       exit(2);
     }
   }
@@ -711,6 +728,9 @@ int main(int argc, char* argv[])
   for( i = 0; i < n_cores; ++i )
     if( move_to_core(cores[i]) == 0 )
       threads[g.n_threads++].core_i = cores[i];
+    else
+      fprintf(stderr, "%s: WARNING: unable to use core %d\n",
+              APP_NAME, cores[i]);
 
   signal(SIGALRM, handle_alarm);
 
@@ -722,9 +742,9 @@ int main(int argc, char* argv[])
   /* NB. Important to write raw results first, as write_summary() sorts the
    * interruptions.
    */
+  int err = 0;
   if( raw_prefix )
-    write_raw(threads, raw_prefix);
+    err = write_raw(threads, raw_prefix);
   write_summary(threads, stdout);
-
-  return 0;
+  return err;
 }
