@@ -38,6 +38,7 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <sched.h>
+#include <stdbool.h>
 
 
 #ifdef __GNUC__
@@ -437,7 +438,7 @@ static void write_raw(struct thread* threads, const char* outf)
   FILE* f;
   int i;
   for( i = 0; i < g.n_threads; ++i ) {
-    sprintf(fname, "%s.%d", outf, i);
+    sprintf(fname, "%s.%d", outf, threads[i].core_i);
     if( (f = fopen(fname, "w")) == NULL ) {
       fprintf(stderr, "ERROR: Could not open '%s' for writing\n", fname);
       fprintf(stderr, "ERROR: %s\n", strerror(errno));
@@ -581,6 +582,39 @@ static void handle_alarm(int code)
 }
 
 
+static void append_int(int** list, int* list_len, int val)
+{
+  int idx = (*list_len)++;
+  TEST( *list = realloc(*list, *list_len * sizeof(int)) );
+  (*list)[idx] = val;
+}
+
+
+static bool parse_comma_sep_ranges(const char* csr_in,
+                                   int** list, int* list_len)
+{
+  char* csr = strdupa(csr_in);
+  char *saveptr, *t;
+  unsigned low, high;
+  char dummy;
+
+  *list = NULL;
+  *list_len = 0;
+
+  while( (t = strtok_r(csr, ",", &saveptr)) != NULL ) {
+    csr = NULL;
+    if( sscanf(t, "%u - %u%c", &low, &high, &dummy) == 2 )
+      for( ; low <= high; ++low )
+        append_int(list, list_len, low);
+    else if( sscanf(t, "%u%c", &low, &dummy) == 1 )
+      append_int(list, list_len, low);
+    else
+      return false;
+  }
+  return true;
+}
+
+
 static void usage(const char* prog)
 {
   fprintf(stderr, "usage:\n");
@@ -589,6 +623,7 @@ static void usage(const char* prog)
   fprintf(stderr, "options:\n");
   fprintf(stderr, "  --runtime <seconds>\n");
   fprintf(stderr, "  --raw <filename-prefix>\n");
+  fprintf(stderr, "  --cores <comma-sep-list-of-cores>\n");
   fprintf(stderr, "  --sort\n");
   fprintf(stderr, "  --verbose\n");
   exit(1);
@@ -599,9 +634,11 @@ int main(int argc, char* argv[])
 {
   struct thread* threads;
   const char* app = argv[0];
-  const char* outf = NULL;
+  const char* raw_prefix = NULL;
+  const char* cores_opt = NULL;
   char dummy;
   int i, n_cores, runtime = 70;
+  int* cores;
 
   g.max_interruptions = 1000000;
 
@@ -615,7 +652,11 @@ int main(int argc, char* argv[])
       --argc, ++argv;
     }
     else if( strcmp(argv[0], "--raw") == 0 && argc > 1 ) {
-      outf = argv[1];
+      raw_prefix = argv[1];
+      --argc, ++argv;
+    }
+    else if( strcmp(argv[0], "--cores") == 0 && argc > 1 ) {
+      cores_opt = argv[1];
       --argc, ++argv;
     }
     else if( strcmp(argv[0], "--runtime") == 0 && argc > 1 &&
@@ -637,12 +678,25 @@ int main(int argc, char* argv[])
       sscanf(argv[0], "%u%c", &g.threshold_nsec, &dummy) != 1 )
     usage(app);
 
+  if( cores_opt == NULL ) {
+    n_cores = sysconf(_SC_NPROCESSORS_CONF);
+    TEST( cores = malloc(n_cores * sizeof(cores[0])) );
+    for( i = 0; i < n_cores; ++i )
+      cores[i] = i;
+  }
+  else {
+    if( ! parse_comma_sep_ranges(cores_opt, &cores, &n_cores) ) {
+      fprintf(stderr, "ERROR: badly formatted --cores arg\n");
+      exit(2);
+    }
+  }
+
+  /* Check which cores we can use by trying to set affinity to each. */
   move_to_root_cpuset();
-  n_cores = sysconf(_SC_NPROCESSORS_CONF);
   TEST( threads = malloc(n_cores * sizeof(threads[0])) );
   for( i = 0; i < n_cores; ++i )
-    if( move_to_core(i) == 0 )
-      threads[g.n_threads++].core_i = i;
+    if( move_to_core(cores[i]) == 0 )
+      threads[g.n_threads++].core_i = cores[i];
 
   signal(SIGALRM, handle_alarm);
 
@@ -654,8 +708,8 @@ int main(int argc, char* argv[])
   /* NB. Important to write raw results first, as write_summary() sorts the
    * interruptions.
    */
-  if( outf )
-    write_raw(threads, outf);
+  if( raw_prefix )
+    write_raw(threads, raw_prefix);
   write_summary(threads, stdout);
 
   return 0;
