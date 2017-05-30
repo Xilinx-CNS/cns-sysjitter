@@ -1,7 +1,8 @@
+#define SYSJITTER_VERSION  "1.4"
 /*
- * sysjitter v1.3
+ * sysjitter
  *
- * Copyright 2010-2015 David Riddoch <david@riddoch.org.uk>
+ * Copyright 2010-2017 David Riddoch <david@riddoch.org.uk>
  *
  * This program is free software: you can redistribute it and/or modify it
  * under the terms of version 3 of the GNU General Public License as
@@ -677,6 +678,10 @@ int main(int argc, char* argv[])
     }
     else if( strcmp(argv[0], "--verbose") == 0 ) {
       g.verbose = 1;
+    }
+    else if( strcmp(argv[0], "--version") == 0 ) {
+      printf("%s\n", SYSJITTER_VERSION);
+      exit(0);
     }
     else {
       usage(app);
