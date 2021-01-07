@@ -23,3 +23,6 @@ Further PPC build fix.
 Kill the error message when cpusets are not being used.
 Fixes for Power platform, and update version to v1.2.
 Added note to README to clarify meaning of cpu_mhz.
+
+
+(C) Copyright 2010-2021 Xilinx, Inc.

@@ -1,6 +1,7 @@
 sysjitter v1.4
 
- Copyright 2010-2017 David Riddoch <david@riddoch.org.uk>
+ (C) Copyright 2021 Xilinx, Inc.
+ (C) Copyright 2010-2017 David Riddoch <david@riddoch.org.uk>
 
  sysjitter measures the extent to which the system impacts on user-level
  code by causing jitter.  It runs a thread on each processor core, and when
